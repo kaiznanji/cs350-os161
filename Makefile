@@ -56,6 +56,14 @@ clean:
 	(cd user && $(MAKE) $@)
 	rm -rf $(INSTALLTOP)
 
+createNew:
+	cd kern/conf
+	./config ASST$(ASSIGNMENT)
+	cd ../compile/ASST$(ASSIGNMENT)
+	bmake depend
+	bmake
+	bmake install
+
 distclean: clean
 	rm -rf $(WORKDIR)
 
