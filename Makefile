@@ -58,8 +58,8 @@ clean:
 
 createNew:
 	cd kern/conf
-	./config ASST$(ASSIGNMENT)
-	cd ../compile/ASST$(ASSIGNMENT)
+	(./config ASST$(A))
+	(cd ../compile/ASST$(A))
 	bmake depend
 	bmake
 	bmake install
