@@ -45,6 +45,7 @@
 #include "opt-synchprobs.h"
 #include "opt-sfs.h"
 #include "opt-net.h"
+#include "opt-A2.h"
 
 /*
  * In-kernel menu and command dispatcher.
@@ -93,16 +94,25 @@ cmd_progthread(void *ptr, unsigned long nargs)
 
 	KASSERT(nargs >= 1);
 
+#if OPT_A2
+	/* n/a */
+#else
 	if (nargs > 2) {
 		kprintf("Warning: argument passing from menu not supported\n");
 	}
+#endif
 
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
 
+#if OPT_A2
+	result = runprogram(progname, (int) nargs, args);
+#else
 	result = runprogram(progname);
+#endif
+
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
@@ -259,21 +269,6 @@ cmd_sync(int nargs, char **args)
 	return 0;
 }
 
-static
-int
-cmd_dth(int nargs, char **args)
-{
-
-	(void)nargs;
-	(void)args;
-
-	dbflags = 0x0010;
-
-
-	return 0;
-
-}
-
 /*
  * Command for doing an intentional panic.
  */
@@ -302,6 +297,21 @@ cmd_quit(int nargs, char **args)
 	sys_reboot(RB_POWEROFF);
 	thread_exit();
 	return 0;
+}
+
+/*
+* Command for enabling debugging messages of tye DB_THREADS.
+*/
+static
+int
+cmd_dth(int nargs, char **args)
+{
+  (void)nargs;
+  (void)args;
+
+  dbflags = 0x0010;
+
+  return 0; 
 }
 
 /*
@@ -451,8 +461,8 @@ static const char *opsmenu[] = {
 	"[pwd]     Print current directory   ",
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
-	"[dth]     DB_THREADS enabled        ",
 	"[q]       Quit and shut down        ",
+        "[dth]     Enable debugging message of type DB_THREAD",
 	NULL
 };
 
@@ -562,10 +572,10 @@ static struct {
 	{ "pwd",	cmd_pwd },
 	{ "sync",	cmd_sync },
 	{ "panic",	cmd_panic },
-	{ "dth",        cmd_dth },
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+	{ "dth",        cmd_dth},
 
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */

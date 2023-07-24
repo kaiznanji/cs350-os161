@@ -50,6 +50,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <opt-A2.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -69,7 +70,10 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
-
+#if OPT_A2
+volatile int counter;
+struct lock *counter_lk;
+#endif
 
 /*
  * Create a proc structure.
@@ -103,6 +107,23 @@ proc_create(const char *name)
 	proc->console = NULL;
 #endif // UW
 
+#if OPT_A2
+	proc->done = false;
+	proc->exit_code = 0;
+
+	if (counter != 1) lock_acquire(counter_lk);
+	
+	proc->pid = counter;
+	++counter;
+
+	if (counter != 2) lock_release(counter_lk);
+
+	proc->parent = NULL;
+	proc->children = array_create();
+	proc->lk = lock_create("lk");
+	proc->finished = cv_create("finished");
+#endif
+
 	return proc;
 }
 
@@ -123,7 +144,6 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
-
 	/*
 	 * We don't take p_lock in here because we must have the only
 	 * reference to this structure. (Otherwise it would be
@@ -163,29 +183,40 @@ proc_destroy(struct proc *proc)
 	}
 #endif // UW
 
+#if OPT_A2
+        for (int i = array_num(proc->children) - 1; i >= 0; i--) {
+            struct proc *child = array_get(proc->children, i);
+            child->parent = NULL;
+            array_remove(proc->children, i);
+	    if (child->done == true) proc_destroy(child);
+        }
+
+        array_destroy(proc->children);
+        lock_destroy(proc->lk);
+	cv_destroy(proc->finished);
+#endif
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
-
 	kfree(proc->p_name);
-	kfree(proc);
+        kfree(proc);
 
 #ifdef UW
-	/* decrement the process count */
+        /* decrement the process count */
         /* note: kproc is not included in the process count, but proc_destroy
-	   is never called on kproc (see KASSERT above), so we're OK to decrement
-	   the proc_count unconditionally here */
-	P(proc_count_mutex); 
-	KASSERT(proc_count > 0);
-	proc_count--;
-	/* signal the kernel menu thread if the process count has reached zero */
-	if (proc_count == 0) {
-	  V(no_proc_sem);
-	}
-	V(proc_count_mutex);
+           is never called on kproc (see KASSERT above), so we're OK to decrement
+           the proc_count unconditionally here */
+        P(proc_count_mutex);
+        KASSERT(proc_count > 0);
+        proc_count--;
+        /* signal the kernel menu thread if the process count has reached zero */
+        if (proc_count == 0) {
+          V(no_proc_sem);
+        }
+        V(proc_count_mutex);
 #endif // UW
-	
-
 }
+
 
 /*
  * Create the process structure for the kernel.
@@ -193,6 +224,15 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+
+#if OPT_A2
+  counter = 1;
+  counter_lk = lock_create("counter_lk");
+  if (counter_lk == NULL) {
+    panic("could not create counter_lk lock\n");
+  }
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
@@ -208,6 +248,7 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
 }
 
 /*

@@ -37,7 +37,9 @@
  */
 
 #include <spinlock.h>
+#include <synch.h>
 #include <thread.h> /* required for struct threadarray */
+#include "opt-A2.h"
 
 struct addrspace;
 struct vnode;
@@ -50,7 +52,7 @@ struct semaphore;
  */
 struct proc {
 	char *p_name;			/* Name of this process */
-	struct spinlock p_lock;		/* Lock for this structure */
+	struct spinlock p_lock;		/* Lock for this structure */  // why not use struct lock?
 	struct threadarray p_threads;	/* Threads in this process */
 
 	/* VM */
@@ -68,7 +70,15 @@ struct proc {
   struct vnode *console;                /* a vnode for the console device */
 #endif
 
-	/* add more material here as needed */
+#if OPT_A2
+  	pid_t pid;
+	int exit_code;
+	bool done;
+	struct proc *parent;
+	struct array *children;
+	struct lock *lk;
+	struct cv *finished;
+#endif
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -78,6 +88,12 @@ extern struct proc *kproc;
 #ifdef UW
 extern struct semaphore *no_proc_sem;
 #endif // UW
+
+#if OPT_A2 
+extern struct lock *lock_pid;
+extern int index;
+extern struct proc *proc_lib[10000];
+#endif
 
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
@@ -99,6 +115,5 @@ struct addrspace *curproc_getas(void);
 
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *curproc_setas(struct addrspace *);
-
 
 #endif /* _PROC_H_ */
